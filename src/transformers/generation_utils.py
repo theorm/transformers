@@ -28,6 +28,7 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    LogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -261,6 +262,7 @@ class GenerationMixin:
         eos_token_id: int,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
+        custom_logits_processor_factory: Optional[Callable[[], LogitsProcessor]],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -290,6 +292,8 @@ class GenerationMixin:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
+        if custom_logits_processor_factory is not None:
+            processors.append(custom_logits_processor_factory())
         return processors
 
     @torch.no_grad()
@@ -315,6 +319,7 @@ class GenerationMixin:
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        custom_logits_processor_factory: Optional[Callable[[], LogitsProcessor]] = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -388,6 +393,10 @@ class GenerationMixin:
                 conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
+            custom_logits_processor_factory: (:obj:`Callable[[], LogitsProcessor]`, `optional`):
+                If provided, this logits processor is created and added to the list of other logits processors like the
+                ones that enforce `length_penalty` and filter out `bad_words_ids`. This argument might be useful
+                for experiments that require tapping into logits at every generation step. 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -509,6 +518,7 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             num_beams=num_beams,
+            custom_logits_processor_factory=custom_logits_processor_factory,
         )
 
         if is_greedy_gen_mode:
